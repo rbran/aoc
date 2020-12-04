@@ -7,6 +7,7 @@ use std::fs;
 
 const DEFAULT_INPUT_FILE: &str = "input.txt";
 
+#[derive(Clone)]
 struct Slope {
     mov_x: usize,
     mov_y: usize,
@@ -54,6 +55,13 @@ impl Slope {
             data,
         }
     }
+
+    fn reset(&mut self, mov_x: usize, mov_y: usize) {
+        self.mov_x = mov_x;
+        self.mov_y = mov_y;
+        self.pos_x = 0;
+        self.pos_y = 0;
+    }
 }
 
 impl Iterator for Slope {
@@ -82,6 +90,17 @@ fn main() {
         .unwrap();
     let input_data = fs::read(file_path).expect("Unable to read the File");
     let slope = Slope::new(input_data);
-    let p1_res = slope.filter(|&x| x).count();
+    let p1_res = slope.clone().filter(|&x| x).count();
+    //TODO: Fix this clone implementing IntoIterator
     println!("Part1: Found {} trees", p1_res);
+
+    let mut p2_res = 1;
+    let p2_tests: [(usize, usize); 5] = [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)];
+    for (mov_x, mov_y) in p2_tests.iter() {
+        let mut slope = slope.clone();
+        slope.reset(*mov_x, *mov_y);
+        let res = slope.filter(|&x| x).count();
+        p2_res *= res;
+    }
+    println!("Part2: Mult result {}", p2_res);
 }
