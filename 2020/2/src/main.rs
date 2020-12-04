@@ -13,7 +13,8 @@ fn main() {
         .or(Some(DEFAULT_INPUT_FILE.to_string()))
         .unwrap();
     let file = fs::read_to_string(file_path).expect("Unable to read the File");
-    let mut valid_count = 0;
+    let mut p1_valid_count = 0; //part 1 counter
+    let mut p2_valid_count = 0; //part 2 counter
     for cap in regex.captures_iter(file.as_str()) {
         let (min, max, chr, pass) = (
             cap[1].parse::<usize>().unwrap(),
@@ -22,6 +23,7 @@ fn main() {
             cap[4].to_string(),
         );
         assert!(min <= max);
+        // check part 1
         let mut chr_count = 0;
         for i in pass.chars() {
             if i == chr {
@@ -29,8 +31,15 @@ fn main() {
             }
         }
         if chr_count <= max && chr_count >= min {
-            valid_count += 1;
+            p1_valid_count += 1;
         }
+        //check part 2
+        let mut pass_iter = pass.chars();
+        let first = pass_iter.nth(min - 1).unwrap();
+        let second = pass_iter.nth(max - min - 1).unwrap(); //reuse the same iterator
+        p2_valid_count += if first == second { 0 }
+        else if first == chr || second == chr { 1 }
+        else { 0 };
     }
-    println!("valid passwords {}", valid_count);
+    println!("p1 {}\np2 {}", p1_valid_count, p2_valid_count);
 }
