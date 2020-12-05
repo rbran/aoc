@@ -45,6 +45,101 @@ impl<'a> Doc<'a> {
         }
         true
     }
+
+    fn is_valid_p2(&self) -> bool {
+        for (key, value) in self.data.iter() {
+            match key {
+                &b"byr" => {
+                    if value.len() != 4 {
+                        return false;
+                    }
+                    let value = String::from_utf8_lossy(value).parse::<u32>().unwrap_or(0);
+                    if value > 2002 || value < 1920 {
+                        return false;
+                    }
+                }
+                &b"iyr" => {
+                    if value.len() != 4 {
+                        return false;
+                    }
+                    let value = String::from_utf8_lossy(value).parse::<u32>().unwrap_or(0);
+                    if value > 2020 || value < 2010 {
+                        return false;
+                    }
+                }
+                &b"eyr" => {
+                    if value.len() != 4 {
+                        return false;
+                    }
+                    let value = String::from_utf8_lossy(value).parse::<u32>().unwrap_or(0);
+                    if value > 2030 || value < 2020 {
+                        return false;
+                    }
+                }
+                &b"hgt" => {
+                    lazy_static! {
+                        static ref RE_HGT: Regex = Regex::new("([0-9]{2,3})(cm|in)").unwrap();
+                    }
+                    let cap = RE_HGT.captures(value);
+                    if cap.is_none() {
+                        return false;
+                    }
+                    let cap = cap.unwrap();
+                    let value = String::from_utf8_lossy(cap.get(1).unwrap().as_bytes())
+                        .parse::<u32>()
+                        .unwrap_or(0);
+                    let unit = cap.get(2).unwrap().as_bytes();
+                    match unit {
+                        b"cm" => {
+                            if value < 150 || value > 193 {
+                                return false;
+                            }
+                        }
+                        b"in" => {
+                            if value < 59 || value > 76 {
+                                return false;
+                            }
+                        }
+                        _ => panic!("WTF??"),
+                    }
+                }
+                &b"hcl" => {
+                    if value.len() != 7 {
+                        return false;
+                    }
+                    lazy_static! {
+                        static ref RE_HCL: Regex = Regex::new("#[0-9a-f]{6}").unwrap();
+                    }
+                    if !RE_HCL.is_match(value) {
+                        return false;
+                    }
+                }
+                &b"ecl" => {
+                    const ALLOWED: &[&[u8; 3]] =
+                        &[b"amb", b"blu", b"brn", b"gry", b"grn", b"hzl", b"oth"];
+                    if value.len() != 3 {
+                        return false;
+                    }
+                    if ALLOWED.iter().find(|x| x.eq(&value)).is_none() {
+                        return false;
+                    }
+                }
+                &b"pid" => {
+                    if value.len() != 9 {
+                        return false;
+                    }
+                    for &i in value.iter() {
+                        if i < b'0' || i > b'9' {
+                            return false;
+                        }
+                    }
+                }
+                &b"cid" => (), // ignored
+                _ => panic!("WTF?!?!"),
+            }
+        }
+        true
+    }
 }
 
 fn main() {
@@ -72,11 +167,16 @@ fn main() {
 
     //check the docs
     let mut p1_res = 0usize;
+    let mut p2_res = 0usize;
     for raw_doc in raw_docs {
         let doc = Doc::new(raw_doc);
         if doc.is_valid_p1() {
             p1_res += 1;
+            if doc.is_valid_p2() {
+                p2_res += 1;
+            }
         }
     }
     println!("P1: {}", p1_res);
+    println!("P2: {}", p2_res);
 }
