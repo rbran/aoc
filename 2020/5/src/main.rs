@@ -21,9 +21,9 @@ fn main() {
             };
 
             id |= b << (i as u16);
-            if id > p1_res {
-                p1_res = id;
-            }
+        }
+        if id > p1_res {
+            p1_res = id;
         }
     }
     println!("P1: {}", p1_res);
