@@ -5,102 +5,78 @@
 use std::env;
 use std::fs;
 
-const DEFAULT_INPUT_FILE: &str = "input.txt";
-
 #[derive(Clone)]
-struct Slope {
-    mov_x: usize,
-    mov_y: usize,
-    pos_x: usize,
-    pos_y: usize,
-    data: Vec<Vec<bool>>, //tree is true
+struct Slope<'a> {
+    num_rows: usize,
+    num_lines: usize,
+    data: &'a [u8],
 }
 
-impl Slope {
-    fn new(raw_data: Vec<u8>) -> Slope {
+struct SlopeIter<'a> {
+    mov: (usize, usize), //(x, y)
+    pos: (usize, usize),
+    slope: &'a Slope<'a>,
+}
+
+impl<'a> Slope<'a> {
+    fn new(data: &'a [u8]) -> Slope {
         //get the input len of the lines and columns
-        let row_len = raw_data
-            .iter()
-            .position(|&x| x == b'\n')
-            .expect("Didn't found \\n on input data");
-        assert!(row_len > 0);
-        let line_len = raw_data.len() / (row_len + 1); //+1 because of \n
-
-        //convert the input from bytes to true/false
-        let mut input = raw_data.iter().filter_map(|x| match *x {
-            b'.' => Some(false),
-            b'#' => Some(true),
-            b'\n' => None, //ignore new line
-            _ => panic!("Invalid input data"),
-        });
-
-        //create a vector that will store all lines
-        let mut data = Vec::with_capacity(line_len);
-        for _ in 0..line_len {
-            //the line vector
-            let mut row = Vec::with_capacity(row_len);
-            for _ in 0..row_len {
-                row.push(input.next().expect("Invalid input size"));
-            }
-            data.push(row);
-        }
-        assert_eq!(input.next(), None); //just confirm the EoF
+        let num_rows = data.iter().position(|&x| x == b'\n').unwrap();
+        assert!(num_rows > 0);
+        let num_lines = data.len() / (num_rows + 1); //+1 because of \n
 
         //return the struct
         Slope {
-            mov_x: 3,
-            mov_y: 1,
-            pos_x: 0,
-            pos_y: 0,
+            num_rows,
+            num_lines,
             data,
         }
     }
+}
 
-    fn reset(&mut self, mov_x: usize, mov_y: usize) {
-        self.mov_x = mov_x;
-        self.mov_y = mov_y;
-        self.pos_x = 0;
-        self.pos_y = 0;
+impl<'a> SlopeIter<'a> {
+    fn new(mov: (usize, usize), slope: &'a Slope<'a>) -> Self {
+        SlopeIter {
+            mov,
+            pos: (0, 0),
+            slope,
+        }
     }
 }
 
-impl Iterator for Slope {
+impl<'a> Iterator for SlopeIter<'a> {
     type Item = bool;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.pos_y >= self.data.len() {
-            return None; // reach the end of the slope
+        if self.pos.1 >= self.slope.num_lines {
+            return None; //end of the slope
         }
+        //calculate the current possition on data
+        let pos = (self.pos.1 * (self.slope.num_rows + 1)) + self.pos.0;
 
-        let ret = self.data[self.pos_y][self.pos_x];
-        self.pos_x += self.mov_x;
-        self.pos_y += self.mov_y;
-
-        if self.pos_x >= self.data[0].len() {
-            // slope just repeat to the right, so go back to the start
-            self.pos_x %= self.data[0].len();
+        //calculate the next posistion
+        self.pos.0 += self.mov.0;
+        self.pos.1 += self.mov.1;
+        //rows just repeats, so warp if necessary
+        if self.pos.0 >= self.slope.num_rows {
+            self.pos.0 %= self.slope.num_rows;
         }
-        Some(ret)
+        Some(self.slope.data[pos] == b'#')
     }
 }
 
-fn main() {
-    let file_path = env::args()
-        .nth(1)
-        .or(Some(DEFAULT_INPUT_FILE.to_string()))
-        .unwrap();
-    let input_data = fs::read(file_path).expect("Unable to read the File");
-    let slope = Slope::new(input_data);
-    let p1_res = slope.clone().filter(|&x| x).count();
-    //TODO: Fix this clone implementing IntoIterator
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // assuming all passwords are lower case
+    let input = fs::read(env::args().nth(1).unwrap_or("input.txt".to_string()))?;
+    let slope = Slope::new(&input);
+
+    let p1_res = SlopeIter::new((3, 1), &slope).filter(|&x| x).count();
     println!("Part1: Found {} trees", p1_res);
 
     let mut p2_res = 1;
-    let p2_tests: [(usize, usize); 5] = [(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)];
-    for (mov_x, mov_y) in p2_tests.iter() {
-        let mut slope = slope.clone();
-        slope.reset(*mov_x, *mov_y);
-        let res = slope.filter(|&x| x).count();
+    for mov in &[(1, 1), (3, 1), (5, 1), (7, 1), (1, 2)] {
+        let res = SlopeIter::new(*mov, &slope).filter(|&x| x).count();
         p2_res *= res;
     }
     println!("Part2: Mult result {}", p2_res);
+    Ok(())
 }
