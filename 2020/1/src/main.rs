@@ -7,21 +7,23 @@ fn find_n_numbers(input: &Vec<usize>, n: usize) -> usize {
     assert!(n > 0);
     let input_index: Vec<(usize, usize)> = input.iter().copied().enumerate().collect();
     let mut numbers: Vec<(usize, usize)> = Vec::with_capacity(n);
+    let mut sum = 0usize;
 
     let mut index = 0usize;
     loop {
         for (i, number) in input_index[index..].iter() {
-            let sum: usize = *number + numbers.iter().map(|(_, x)| x).sum::<usize>();
+            let sum_verify = sum + *number;
             if numbers.len() == n - 1 {
                 //last number only accept if == 2020
-                if sum == 2020 {
+                if sum_verify == 2020 {
                     numbers.push((*i, *number));
                     break;
                 }
             } else {
-                if sum > 2020 {
+                if sum_verify > 2020 {
                     continue; //too big, no other value could result in 2020
                 } else {
+                    sum = sum_verify;
                     numbers.push((*i, *number));
                 }
             }
@@ -31,7 +33,10 @@ fn find_n_numbers(input: &Vec<usize>, n: usize) -> usize {
         } else {
             match numbers.pop() {
                 None => panic!("Unable to find the number!"),
-                Some((i, _)) => index = i + 1,
+                Some((i, number)) => {
+                    index = i + 1;
+                    sum -= number;
+                }
             }
         }
     }
