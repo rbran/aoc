@@ -4,6 +4,8 @@ extern crate lazy_static;
 extern crate regex;
 
 use regex::Regex;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -11,18 +13,22 @@ use std::fs;
 const DEFAULT_INPUT_FILE: &str = "input.txt";
 
 struct AviationRegulation<'a> {
-    rules: Vec<Rule<'a>>,
+    rules: HashMap<&'a str, Rc<RefCell<Rule<'a>>>>,
 }
 
 impl<'a> AviationRegulation<'a> {
     fn new(data: &'a str) -> Self {
         let rules_raw = data.lines();
-        let mut rules = Vec::new();
+        let mut rules = HashMap::new();
         for rule_raw in rules_raw {
-            let rule = Rule::new(rule_raw);
-            rules.push(rule);
+            let rule_raw = Rule::new(rule_raw);
+            let bag = rule_raw.bag;
+            let rule = Rc::new(RefCell::new(rule_raw));
+            rules.insert(bag, rule);
         }
-        AviationRegulation { rules }
+        AviationRegulation {
+            rules,
+        }
     }
 
     fn solve_p1(&self, bag: &str) -> usize {
@@ -35,12 +41,12 @@ impl<'a> AviationRegulation<'a> {
                 None => break, //no more bags to check
             };
             bags_checked.push(bag);
-            for rule in &self.rules {
-                if rule.allowed.contains_key(bag) {
-                    if !bags_checked.contains(&rule.bag) && !bags_check.contains(&rule.bag) {
+            for (rule_bag, rule) in &self.rules {
+                if rule.borrow().allowed.contains_key(bag) {
+                    if !bags_checked.contains(&rule_bag) && !bags_check.contains(&rule_bag) {
                         //our bag can fit inside this bag, so check where this fit
                         ret += 1;
-                        bags_check.push(rule.bag);
+                        bags_check.push(rule_bag);
                     }
                 }
             }
