@@ -53,11 +53,28 @@ impl<'a> AviationRegulation<'a> {
         }
         ret
     }
+
+    fn solve_p2(&self, bag: &str) -> usize {
+        let mut ret = 0;
+
+        let mut rule = self.rules.get(bag).unwrap().borrow_mut();
+        if let Some(x) = rule.contains {
+            return x;
+        }
+        for (bag, number) in rule.allowed.iter() {
+            // the bag contains all it's internal bags + itself
+            ret += (self.solve_p2(bag) + 1) * number;
+        }
+        rule.contains = Some(ret);
+
+        ret
+    }
 }
 
 struct Rule<'a> {
     bag: &'a str,
     allowed: HashMap<&'a str, usize>,
+    contains: Option<usize>,
 }
 
 impl<'a> Rule<'a> {
@@ -83,6 +100,7 @@ impl<'a> Rule<'a> {
         Rule {
             bag: bag_name,
             allowed,
+            contains: None
         }
     }
 }
@@ -95,4 +113,5 @@ fn main() {
     let file = fs::read_to_string(file_path).expect("Unable to read the File");
     let rules = AviationRegulation::new(file.as_str());
     println!("P1: {}", rules.solve_p1("shiny gold"));
+    println!("P2: {}", rules.solve_p2("shiny gold"));
 }
