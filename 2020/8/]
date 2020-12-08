@@ -1,0 +1,156 @@
+use std::cell::RefCell;
+use std::env;
+use std::error;
+use std::fs;
+use std::io::Error;
+use std::io::ErrorKind::InvalidData;
+use std::rc::{Rc, Weak};
+
+#[derive(Clone, Copy)]
+enum Cmd {
+    Acc(isize),
+    Jmp(isize),
+    Nop(isize),
+    End,
+    Nil,
+}
+
+//struct Cpu {
+//    cmds: Vec<Exec>,
+//    pc: usize,
+//    acc: isize,
+//}
+//
+//impl Iterator for Cpu {
+//    type Item = isize;
+//    fn next(&mut self) -> Option<Self::Item> {
+//        let cmd = self.cmds.get_mut(self.pc)?;
+//        if cmd.exec {
+//            return None;
+//        }
+//        cmd.exec = true;
+//        match cmd.cmd {
+//            Cmd::Nop => {
+//                self.pc += 1;
+//                Some(self.acc)
+//            }
+//            Cmd::Acc => {
+//                self.acc += cmd.value;
+//                self.pc += 1;
+//                Some(self.acc)
+//            }
+//            Cmd::Jmp => {
+//                if self.pc > isize::MAX as usize {
+//                    return None;
+//                }
+//                let pc_res = self.pc as isize + cmd.value;
+//                if pc_res < 0 {
+//                    return None;
+//                }
+//                let pc_res = pc_res as usize;
+//                if pc_res >= self.cmds.len() {
+//                    return None;
+//                }
+//                self.pc = pc_res as usize;
+//                Some(self.acc)
+//            }
+//        }
+//    }
+//}
+
+struct ExecBranch<'a> {
+    cmd: Cmd,
+    exec: bool,
+    index: Option<usize>, //position on the original file
+    dest: Weak<RefCell<ExecBranch<'a>>>,
+    xrefs: Vec<Weak<RefCell<ExecBranch<'a>>>>,
+}
+
+impl<'a> ExecBranch<'a> {
+    fn parse(line: &'a str, index: Option<usize>) -> Result<ExecBranch, Box<dyn error::Error>> {
+        let mut line = line.split(' ');
+        let cmd = line
+            .next()
+            .ok_or_else(|| Box::new(Error::new(InvalidData, "")))?;
+        let value = line
+            .next()
+            .ok_or_else(|| Box::new(Error::new(InvalidData, "")))?
+            .parse::<isize>()?;
+        let cmd = match cmd {
+            "acc" => Cmd::Acc(value),
+            "nop" => Cmd::Nop(value),
+            "jmp" => Cmd::Jmp(value),
+            _ => {
+                return Err(Box::new(Error::new(InvalidData, "")));
+            }
+        };
+        Ok(Self::new(cmd, index))
+    }
+
+    fn new(cmd: Cmd, index: Option<usize>) -> Self {
+        ExecBranch {
+            cmd,
+            exec: false,
+            index,
+            dest: Weak::new(),
+            xrefs: vec![],
+        }
+    }
+}
+struct ExecTree<'a> {
+    all: Vec<Rc<RefCell<ExecBranch<'a>>>>,
+    end: Rc<RefCell<ExecBranch<'a>>>,     //detect invalid references
+    invalid: Rc<RefCell<ExecBranch<'a>>>, //detect invalid references
+}
+
+impl<'a> ExecTree<'a> {
+    fn new(data: &str) -> Result<Self, Box<dyn error::Error>> {
+        //basic tree struct
+        let tree = 
+        let ret = ExecTree {
+            all: data
+                .lines()
+                .enumerate()
+                .map(|(index, x)| Rc::new(RefCell::new(ExecBranch::parse(x, Some(index)))))
+                .collect()?,
+            end: Rc::new(RefCell::new(ExecBranch::new(Cmd::End, None))),
+            invalid: Rc::new(RefCell::new(ExecBranch::new(Cmd::Nil, None))),
+        };
+        //assemble the tree by inserting the dst and xrefs
+        for index in 0..ret.all.len() {
+            let branch = ret.all.get(index).unwrap();
+            let (branch_cmd, branch_index) = {
+                let branch = branch.borrow();
+                (branch.cmd, branch.index.unwrap())
+            };
+            let dst_branch = match branch_cmd {
+                Cmd::Jmp(branch_value) => {
+                    let dst_index = branch_index as isize + branch_value;
+                    if dst_index as usize == ret.all.len() {
+                        &ret.end //valid end
+                    } else {
+                        ret.all.get(dst_index as usize).unwrap_or(&ret.invalid)
+                    }
+                }
+                _ => ret.all.get(branch_index + 1).unwrap_or(&ret.end),
+            };
+            dst_branch.borrow_mut().xrefs.push(Rc::downgrade(branch));
+            branch.borrow_mut().dest = Rc::downgrade(dst_branch);
+        }
+        Ok(ret)
+    }
+}
+
+fn main() -> Result<(), Box<dyn error::Error>> {
+    // assuming all passwords are lower case
+    let input = fs::read_to_string(env::args().nth(1).unwrap_or("input.txt".to_string()))?;
+    let cmds: Result<Vec<Exec>, _> = input.lines().map(parse_instruction).collect();
+    let cmds = cmds?;
+    let sim1 = Cpu {
+        cmds,
+        acc: 0,
+        pc: 0,
+    };
+    println!("P1: {}", sim1.last().unwrap_or(0));
+    Ok(())
+}
