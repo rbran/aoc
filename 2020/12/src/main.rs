@@ -1,3 +1,5 @@
+// This could be simplified by using imaginary numbers
+
 use std::env;
 use std::fs;
 use std::io::Error;
@@ -86,8 +88,8 @@ impl FromStr for Nav {
 struct Gps {
     cmds: Vec<Nav>,
     facing: MovDir,
-    pos_x: i128,
-    pos_y: i128,
+    pos: (isize, isize),
+    waypoint: (isize, isize),
 }
 
 impl FromStr for Gps {
@@ -100,26 +102,45 @@ impl FromStr for Gps {
                 .map(|line| line.parse())
                 .collect::<Result<_, _>>()?,
             facing: MovDir::E,
-            pos_x: 0,
-            pos_y: 0,
+            pos: (0, 0),
+            waypoint: (10, 1),
         })
     }
 }
 
 impl Gps {
-    fn move_dir(pos: &mut (i128, i128), dir: MovDir, dist: usize) {
+    fn rot_waypoint(way: &mut (isize, isize), dir: RotDir) {
         match dir {
-            MovDir::E => pos.0 += dist as i128,
-            MovDir::W => pos.0 -= dist as i128,
-            MovDir::N => pos.1 += dist as i128,
-            MovDir::S => pos.1 -= dist as i128,
+            RotDir::F => {
+                way.0 *= -1;
+                way.1 *= -1;
+            }
+            RotDir::R => {
+                let tmp = way.0;
+                way.0 = way.1;
+                way.1 = -tmp;
+            },
+            RotDir::L => {
+                let tmp = way.0;
+                way.0 = -way.1;
+                way.1 = tmp;
+            },
+        }
+    }
+
+    fn move_dir(pos: &mut (isize, isize), dir: MovDir, dist: usize) {
+        match dir {
+            MovDir::E => pos.0 += dist as isize,
+            MovDir::W => pos.0 -= dist as isize,
+            MovDir::N => pos.1 += dist as isize,
+            MovDir::S => pos.1 -= dist as isize,
         }
     }
 
     fn run_all(&mut self) {
         //move out the values to avoid problems with borrowing
         let mut facing = self.facing;
-        let mut pos = (self.pos_x, self.pos_y);
+        let mut pos = self.pos;
 
         for cmd in self.cmds.iter() {
             match cmd {
@@ -130,8 +151,29 @@ impl Gps {
         }
 
         self.facing = facing;
-        self.pos_x = pos.0;
-        self.pos_y = pos.1;
+        self.pos = pos;
+        //self.cmds.clear();
+    }
+
+    fn run_all_v2(&mut self) {
+        //move out the values to avoid problems with borrowing
+        let mut waypoint = self.waypoint;
+        let mut pos = self.pos;
+
+        for cmd in self.cmds.iter() {
+            match cmd {
+                Nav::R(dir) => Gps::rot_waypoint(&mut waypoint, *dir),
+                Nav::M(dir, dist) => Gps::move_dir(&mut waypoint, *dir, *dist),
+                Nav::F(dist) => {
+                    pos = (
+                        pos.0 + waypoint.0 * *dist as isize,
+                        pos.1 + waypoint.1 * *dist as isize,
+                    )
+                }
+            }
+        }
+
+        self.pos = pos;
         //self.cmds.clear();
     }
 }
@@ -139,12 +181,19 @@ impl Gps {
 fn solve1(input: &str) -> Result<usize, Box<Error>> {
     let mut gps: Gps = input.parse()?;
     gps.run_all();
-    Ok((gps.pos_x.abs() + gps.pos_y.abs()) as usize)
+    Ok((gps.pos.0.abs() + gps.pos.1.abs()) as usize)
+}
+
+fn solve2(input: &str) -> Result<usize, Box<Error>> {
+    let mut gps: Gps = input.parse()?;
+    gps.run_all_v2();
+    Ok((gps.pos.0.abs() + gps.pos.1.abs()) as usize)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input: String = fs::read_to_string(env::args().nth(1).unwrap_or("input.txt".to_string()))?;
     println!("P1: {}", solve1(&input)?);
+    println!("P1: {}", solve2(&input)?);
     Ok(())
 }
 
@@ -152,6 +201,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn test_part1() -> Result<(), Box<Error>> {
     const INPUT: &str = "F10\nN3\nF7\nR90\nF11";
     assert_eq!(solve1(INPUT)?, 25);
+    assert_eq!(solve2(INPUT)?, 286);
     Ok(())
 }
 
@@ -160,8 +210,13 @@ fn test_rot() -> Result<(), Box<Error>> {
     const INPUT: &str = "R90\nL90\nL90\nR90\nR180\nL180\nL180\nL180\nR270\nL270";
     let mut gps: Gps = INPUT.parse()?;
     gps.run_all();
-    assert_eq!((gps.pos_x, gps.pos_y), (0, 0));
+    assert_eq!(gps.pos, (0, 0));
     assert_eq!(gps.facing, MovDir::E);
+    let mut gps: Gps = INPUT.parse()?;
+    gps.run_all_v2();
+    assert_eq!(gps.pos, (0, 0));
+    assert_eq!(gps.facing, MovDir::E);
+    assert_eq!(gps.waypoint, (10, 1));
     Ok(())
 }
 
@@ -170,17 +225,27 @@ fn test_mov() -> Result<(), Box<Error>> {
     const INPUT: &str = "F10\nN10\nS10\nE10\nW10";
     let mut gps: Gps = INPUT.parse()?;
     gps.run_all();
-    assert_eq!((gps.pos_x, gps.pos_y), (10, 0));
+    assert_eq!(gps.pos, (10, 0));
     assert_eq!(gps.facing, MovDir::E);
+    let mut gps: Gps = INPUT.parse()?;
+    gps.run_all_v2();
+    assert_eq!(gps.pos, (100, 10));
+    assert_eq!(gps.facing, MovDir::E);
+    assert_eq!(gps.waypoint, (10, 1));
     Ok(())
 }
 
 #[test]
 fn test_mov_rot() -> Result<(), Box<Error>> {
-    const INPUT: &str = "F10\nR90\nF10\nR90\nF10\nR90\nF10";
+    const INPUT: &str = "F10\nR90\nF10\nR90\nF10\nR90\nF10\nR90";
     let mut gps: Gps = INPUT.parse()?;
     gps.run_all();
-    assert_eq!((gps.pos_x, gps.pos_y), (0, 0));
-    assert_eq!(gps.facing, MovDir::N);
+    assert_eq!(gps.pos, (0, 0));
+    assert_eq!(gps.facing, MovDir::E);
+    let mut gps: Gps = INPUT.parse()?;
+    gps.run_all_v2();
+    assert_eq!(gps.pos, (0, 0));
+    assert_eq!(gps.facing, MovDir::E);
+    assert_eq!(gps.waypoint, (10, 1));
     Ok(())
 }
