@@ -46,7 +46,7 @@ fn solve1(input: &str) -> Result<usize, Box<Error>> {
     let service = input.parse::<Service>()?;
     let time = service.time;
     let mut smallest: Option<(usize, usize)> = None;
-    for id in service.lines.iter().find_map(|&x| x) {
+    for id in service.lines.iter().filter_map(|&x| x) {
         let wait = id - (time % id);
         match smallest {
             None => smallest = Some((id, wait)),
