@@ -63,7 +63,35 @@ fn solve1(input: &str) -> Result<usize, Box<Error>> {
 }
 
 fn solve2(input: &str) -> Result<usize, Box<Error>> {
-    unimplemented!();
+    // Chinese remainder stuff
+    let mut global_coprime: usize = 1;
+    let buses: Vec<(usize, usize)> = input
+        .parse::<Service>()?
+        .lines
+        .iter()
+        .enumerate()
+        .filter_map(|(i, x)| match x {
+            None => None,
+            Some(x) => {
+                global_coprime *= *x;
+                Some((i, *x))
+            }
+        })
+        .collect();
+
+    let mut factors = Vec::with_capacity(buses.len());
+
+    for (i, bus) in buses.iter() {
+        let factor: usize = (bus - (i % bus)) % bus;
+        let current_factor: usize = global_coprime / bus;
+        let mut acc_factor = current_factor;
+        while acc_factor % bus != factor {
+            acc_factor += current_factor;
+        }
+        factors.push(acc_factor);
+    }
+
+    Ok(factors.iter().sum::<usize>() % global_coprime)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -77,5 +105,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn test_part_1() -> Result<(), Box<dyn std::error::Error>> {
     const INPUT: &str = "939\n7,13,x,x,59,x,31,19";
     assert_eq!(solve1(INPUT)?, 295);
+    Ok(())
+}
+
+#[test]
+fn test_part_2_1() -> Result<(), Box<dyn std::error::Error>> {
+    const INPUT: &str = "939\n7,13,x,x,59,x,31,19";
+    assert_eq!(solve2(INPUT)?, 1068781);
+    Ok(())
+}
+
+#[test]
+fn test_part_2_2() -> Result<(), Box<dyn std::error::Error>> {
+    const INPUT: &str = "939\n17,x,13,19";
+    assert_eq!(solve2(INPUT)?, 3417);
+    Ok(())
+}
+
+#[test]
+fn test_part_2_3() -> Result<(), Box<dyn std::error::Error>> {
+    const INPUT: &str = "939\n67,7,59,61";
+    assert_eq!(solve2(INPUT)?, 754018);
+    Ok(())
+}
+
+#[test]
+fn test_part_2_4() -> Result<(), Box<dyn std::error::Error>> {
+    const INPUT: &str = "939\n67,x,7,59,61";
+    assert_eq!(solve2(INPUT)?, 779210);
+    Ok(())
+}
+
+#[test]
+fn test_part_2_5() -> Result<(), Box<dyn std::error::Error>> {
+    const INPUT: &str = "939\n67,7,x,59,61";
+    assert_eq!(solve2(INPUT)?, 1261476);
+    Ok(())
+}
+
+#[test]
+fn test_part_2_6() -> Result<(), Box<dyn std::error::Error>> {
+    const INPUT: &str = "939\n1789,37,47,1889";
+    assert_eq!(solve2(INPUT)?, 1202161486);
     Ok(())
 }
