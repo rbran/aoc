@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::collections::HashMap;
 use std::io::Error;
 use std::io::ErrorKind::InvalidData;
 use std::str::FromStr;
@@ -18,7 +18,9 @@ impl FromStr for Program {
             commands: Vec::new(),
         };
         let mut lines = s.lines();
-        let mask = lines.next().ok_or_else(|| Error::new(InvalidData, "bitmap1"))?;
+        let mask = lines
+            .next()
+            .ok_or_else(|| Error::new(InvalidData, "bitmap1"))?;
         if mask.len() != 36 {
             return Err(Error::new(InvalidData, "bitmap2"));
         }
@@ -45,7 +47,7 @@ impl FromStr for Program {
             let error = |_| Err(Error::new(InvalidData, "command3"));
             let addr = addr.parse::<usize>().or_else(error)?;
             let error = |_| Err(Error::new(InvalidData, "command4"));
-            let value = value .parse::<u64>().or_else(error)?;
+            let value = value.parse::<u64>().or_else(error)?;
             ret.commands.push((addr, value));
         }
 
@@ -62,6 +64,40 @@ impl Program {
                 Some(true) => ret |= 1u64 << i,
                 Some(false) => ret &= !(1u64 << i),
             }
+        }
+        ret
+    }
+
+    fn apply_bitmask_addr(&self, addr: usize) -> Vec<usize> {
+        let mut base_value = 0;
+        let mut floats: Vec<usize> = self
+            .bitmask
+            .iter()
+            .enumerate()
+            .filter_map(|(i, bit)| match bit {
+                None => Some(i),
+                Some(true) => {
+                    base_value |= 1 << i;
+                    None
+                }
+                Some(false) => {
+                    base_value |= addr & (1 << i);
+                    None
+                }
+            })
+            .collect();
+
+        let number_addr = 2usize.pow(floats.len() as u32);
+        let mut ret = Vec::with_capacity(number_addr);
+        for value_apply in 0..number_addr {
+            let mut value = base_value; //the floats start with 0
+            for (value_index, float_index) in floats.iter().enumerate() {
+                if value_apply & (1 << value_index) != 0 {
+                    //if apply 1 to float
+                    value |= 1 << float_index;
+                }
+            }
+            ret.push(value);
         }
         ret
     }
@@ -92,13 +128,24 @@ fn solve1(input: &str) -> Result<usize, Box<Error>> {
 }
 
 fn solve2(input: &str) -> Result<usize, Box<Error>> {
-    unimplemented!();
+    let programs = parse_programs(input)?;
+    let mut mem = HashMap::new();
+
+    for program in programs {
+        for (addr, value) in &program.commands {
+            let addrs = program.apply_bitmask_addr(*addr);
+            for addr in &addrs {
+                mem.insert(*addr, *value);
+            }
+        }
+    }
+    Ok(mem.values().sum::<u64>() as usize)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input: String = fs::read_to_string(env::args().nth(1).unwrap_or("input.txt".to_string()))?;
     println!("P1: {}", solve1(&input)?);
-    println!("P1: {}", solve2(&input)?);
+    println!("P2: {}", solve2(&input)?);
     Ok(())
 }
 
@@ -140,5 +187,49 @@ fn test_bitmask_1() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(program.apply_bitmask(255), 254);
     assert_eq!(program.apply_bitmask(0b101010101), 0b101010100);
     assert_eq!(program.apply_bitmask(0b10101010), 0b10101010);
+    Ok(())
+}
+
+#[test]
+fn test_addrmask_1() -> Result<(), Box<dyn std::error::Error>> {
+    let program = "000000000000000000000000000000000000\n\
+                   mem[8] = 11\nmem[7] = 101\nmem[8] = 0"
+        .parse::<Program>()?;
+    assert_eq!(program.apply_bitmask_addr(0), vec![0]);
+    assert_eq!(program.apply_bitmask_addr(1), vec![1]);
+    assert_eq!(program.apply_bitmask_addr(255), vec![255]);
+    assert_eq!(program.apply_bitmask_addr(1 << 35), vec![1 << 35]);
+    let program = "00000000000000000000000000000000000X\n\
+                   mem[8] = 11\nmem[7] = 101\nmem[8] = 0"
+        .parse::<Program>()?;
+    assert_eq!(program.apply_bitmask_addr(0), vec![0, 1]);
+    assert_eq!(program.apply_bitmask_addr(1), vec![0, 1]);
+    assert_eq!(program.apply_bitmask_addr(2), vec![2, 3]);
+    assert_eq!(program.apply_bitmask_addr(3), vec![2, 3]);
+    assert_eq!(program.apply_bitmask_addr(255), vec![254, 255]);
+    assert_eq!(
+        program.apply_bitmask_addr(0b101010101),
+        vec![0b101010100, 0b101010101]
+    );
+    assert_eq!(
+        program.apply_bitmask_addr(0b10101010),
+        vec![0b10101010, 0b10101011]
+    );
+    let program = "0000000000000000000000000000000000XX\n\
+                   mem[8] = 11\nmem[7] = 101\nmem[8] = 0"
+        .parse::<Program>()?;
+    assert_eq!(program.apply_bitmask_addr(0), vec![0, 1, 2, 3]);
+    assert_eq!(program.apply_bitmask_addr(1), vec![0, 1, 2, 3]);
+    assert_eq!(program.apply_bitmask_addr(4), vec![4, 5, 6, 7]);
+    Ok(())
+}
+
+#[test]
+fn test_part_2_1() -> Result<(), Box<dyn std::error::Error>> {
+    const INPUT: &str = "mask = 000000000000000000000000000000X1001X\n\
+                         mem[42] = 100\n\
+                         mask = 00000000000000000000000000000000X0XX\n\
+                         mem[26] = 1";
+    assert_eq!(solve2(INPUT)?, 208);
     Ok(())
 }
