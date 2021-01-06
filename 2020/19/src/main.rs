@@ -1,4 +1,4 @@
-//the solution 1 is terrible and slow
+//the solution is ok, but there is too much memory copy
 
 #[macro_use]
 extern crate lazy_static;
@@ -119,97 +119,125 @@ impl FromStr for Input {
     }
 }
 
-fn combine_eval(x: &Vec<String>, y: &Vec<String>) -> Vec<String> {
-    let mut new = Vec::new();
-    for value1 in x {
-        for value2 in y {
-            new.push(value1.to_owned() + value2);
-        }
-    }
-    new
-}
-
-fn fork_eval(x: &Vec<String>, y: &Vec<String>) -> Vec<String> {
-    x.iter().cloned().chain(y.iter().cloned()).collect()
-}
-
 fn solve1(input: &Input) -> Result<usize, Box<Error>> {
-    //I'll evaluate the rule 0 to all possible results.
-    //I should evaluate only the necessary rules, but instead I'll evaluate all
-    let mut eval: HashMap<usize, Vec<String>> = HashMap::new();
-    let number_rules = input.rules.len();
-    loop {
-        for (index, rule) in input.rules.iter() {
-            println!("{}", *index);
-            //if already eval, skip
-            if eval.contains_key(index) {
-                continue;
-            }
-            match rule {
-                Rule::Value(x) => {
-                    //just insert into eval, if didn't exist already
-                    eval.insert(*index, vec![x.to_string()]);
-                }
-                Rule::Alias(x) => {
-                    //check if the alias is already eval, if not skip
-                    if eval.contains_key(x) {
-                        eval.insert(*index, eval.get(x).unwrap().to_owned());
-                    }
-                }
-                Rule::Dual(x, y) => {
-                    //check if both are eval, if so, combine both
-                    if eval.contains_key(x) && eval.contains_key(y) {
-                        eval.insert(
-                            *index,
-                            combine_eval(
-                                eval.get(x).unwrap(),
-                                eval.get(y).unwrap(),
-                            ),
-                        );
-                    }
-                }
-                Rule::Or(x, y) => {
-                    //check if both are eval, if so insert both
-                    if eval.contains_key(x) && eval.contains_key(y) {
-                        let new = fork_eval(
-                            eval.get(x).unwrap(),
-                            eval.get(y).unwrap(),
-                        );
-                        eval.insert(*index, new);
-                    }
-                }
-                Rule::OrDual(x, y, w, z) => {
-                    //if eval, combine and insert both
-                    if eval.contains_key(x)
-                        && eval.contains_key(y)
-                        && eval.contains_key(w)
-                        && eval.contains_key(z)
-                    {
-                        let a = combine_eval(
-                            eval.get(x).unwrap(),
-                            eval.get(y).unwrap(),
-                        );
-                        let b = combine_eval(
-                            eval.get(w).unwrap(),
-                            eval.get(z).unwrap(),
-                        );
-                        let new = fork_eval(&a, &b);
-                        eval.insert(*index, new);
-                    }
+    let mut ret = 0;
+    for message in input.messages.iter() {
+        let mut chars = message.chars();
+        let matchs = check_rule(&input.rules, &mut chars, input.rules.get(&0).unwrap());
+        if let Some(matchs) = matchs {
+            for part_match in matchs {
+                if message.len() == part_match {
+                    ret += 1;
                 }
             }
-        }
-        if eval.len() == number_rules {
-            break;
         }
     }
-    //count number of messages on 0
-    let valid = eval.get(&0).unwrap();
-    Ok(input.messages.iter().filter(|x| valid.contains(x)).count())
+    Ok(ret)
+}
+
+fn check_rule(
+    rules: &HashMap<usize, Rule>,
+    rest_message: &mut std::str::Chars,
+    current_rule: &Rule,
+) -> Option<Vec<usize>> {
+    match current_rule {
+        Rule::Value(value) => match rest_message.next() {
+            Some(check) if check == *value => Some(vec![1]),
+            _ => None,
+        },
+        Rule::Alias(x) => {
+            check_rule(rules, rest_message, rules.get(x).unwrap())
+        }
+        Rule::Dual(x, y) => {
+            let matchs1 = check_rule(
+                rules,
+                &mut rest_message.clone(),
+                rules.get(x).unwrap(),
+            )?;
+            let rule2 = rules.get(y).unwrap();
+            let mut ret_matchs = vec![];
+            for match1 in matchs1.iter() {
+                let mut message = rest_message.clone();
+                //TODO: WHAT ARE THOSE?!?!?!?!?, use generics instead
+                for _ in 0..*match1 {
+                    message.next();
+                }
+                let match2 = check_rule(rules, &mut message, rule2);
+                if let Some(match2) = match2 {
+                    ret_matchs
+                        .extend(match2.iter().map(|match2| *match2 + *match1));
+                }
+            }
+            if ret_matchs.len() == 0 {
+                return None;
+            } else {
+                return Some(ret_matchs);
+            }
+        }
+        Rule::Or(x, y) => {
+            let match1 = check_rule(
+                rules,
+                &mut rest_message.clone(),
+                rules.get(x).unwrap(),
+            );
+            let match2 = check_rule(rules, rest_message, rules.get(y).unwrap());
+            return match (match1, match2) {
+                (None, None) => None,
+                (None, Some(match2)) => Some(match2),
+                (Some(match1), None) => Some(match1),
+                (Some(mut match1), Some(mut match2)) => {
+                    match1.append(&mut match2);
+                    Some(match1)
+                }
+            };
+        }
+        Rule::OrDual(x, y, z, w) => {
+            let match1 = check_rule(
+                rules,
+                &mut rest_message.clone(),
+                &Rule::Dual(*x, *y),
+            );
+            let match2 = check_rule(rules, rest_message, &Rule::Dual(*z, *w));
+            return match (match1, match2) {
+                (None, None) => None,
+                (None, Some(match2)) => Some(match2),
+                (Some(match1), None) => Some(match1),
+                (Some(mut match1), Some(mut match2)) => {
+                    match1.append(&mut match2);
+                    Some(match1)
+                }
+            };
+        }
+    }
 }
 
 fn solve2(input: &Input) -> Result<usize, Box<Error>> {
-    unimplemented!();
+    let mut rules = input.rules.clone();
+    //add the rules
+    //x: 42 8
+    //y: 42 11
+    //8: 42 | x
+    //11: 42 31 | y 31
+    let pos_x = rules.len();
+    let pos_y = pos_x + 1;
+    rules.insert(pos_x, Rule::Dual(42, 8));
+    rules.insert(pos_y, Rule::Dual(42, 11));
+    rules.insert(8, Rule::Or(42, pos_x));
+    rules.insert(11, Rule::OrDual(42, 31, pos_y, 31));
+
+    let mut ret = 0;
+    for message in input.messages.iter() {
+        let mut chars = message.chars();
+        let matchs = check_rule(&rules, &mut chars, rules.get(&0).unwrap());
+        if let Some(matchs) = matchs {
+            for part_match in matchs {
+                if message.len() == part_match {
+                    ret += 1;
+                }
+            }
+        }
+    }
+    Ok(ret)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -253,8 +281,50 @@ ababbb
 bababa
 abbbab
 aaabbb
-aaaabbb ";
+aaaabbb";
     let input = INPUT.parse()?;
     assert_eq!(solve1(&input)?, 2);
+    Ok(())
+}
+
+#[test]
+fn test_part2() -> Result<(), Box<Error>> {
+    const INPUT: &str = "0: 4 6
+1: 2 3 | 3 2
+2: 4 4 | 5 5
+3: 4 5 | 5 4
+4: \"a\"
+5: \"b\"
+6: 1 5
+
+a";
+    let input = INPUT.parse::<Input>()?;
+    const MESSAGES: &[(&str, bool)] = &[
+        ("ababbb", true),
+        ("bababa", false),
+        ("abbbab", true),
+        ("aaabbb", false),
+        ("aaaabbb", false),
+    ];
+    for (message, res) in MESSAGES.iter() {
+        let result = check_rule(
+            &input.rules,
+            &mut message.chars(),
+            input.rules.get(&0).unwrap(),
+        );
+        match result {
+            None => assert!(!*res),
+            Some(x) => {
+                let mut ret = false;
+                for part_match in x {
+                    if message.len() == part_match {
+                        ret = true;
+                        break;
+                    }
+                }
+                assert_eq!(ret, *res);
+            }
+        }
+    }
     Ok(())
 }
