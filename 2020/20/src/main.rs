@@ -110,7 +110,7 @@ struct Tile {
     flip: bool, //invert the x axis
 }
 
-const fn flip_border(mut n: u16) -> u16 {
+const fn flip_line(mut n: u16) -> u16 {
     let mut acc = 0;
     let mut i = 0;
     while i < 10 {
@@ -130,29 +130,32 @@ impl Tile {
         }
         abs_side
     }
-    //the number is calculated going clock-wise
-    fn get_border(&self, side: Ori) -> u16 {
+
+    fn get_line(&self, side: Ori, line: usize) -> u16 {
         let abs_side = self.get_abs_side(side);
         match abs_side {
             Ori::Down => {
-                let value = (self.pixels & 0x3ff) as u16;
+                let line_pos = line * 10;
+                let value = ((self.pixels & (0x3ff << line_pos)) >> line_pos) as u16;
                 if self.flip {
                     value
                 } else {
-                    flip_border(value)
+                    flip_line(value)
                 }
             }
             Ori::Up => {
-                let value = ((self.pixels & (0x3ff << 90)) >> 90) as u16;
+                let line_pos = 90 - (line * 10);
+                let value =
+                    ((self.pixels & (0x3ff << line_pos)) >> line_pos) as u16;
                 if self.flip {
-                    flip_border(value)
+                    flip_line(value)
                 } else {
                     value
                 }
             }
             Ori::Right => {
+                let mut acc = self.pixels >> line;
                 let mut value = 0;
-                let mut acc = self.pixels;
                 for _ in 0..10 {
                     value <<= 1;
                     value |= (acc & 1) as u16;
@@ -161,24 +164,29 @@ impl Tile {
                 if self.flip {
                     value
                 } else {
-                    flip_border(value)
+                    flip_line(value)
                 }
             }
             Ori::Left => {
+                let mut acc = self.pixels >> (9 - line);
                 let mut value = 0;
-                let mut acc = self.pixels >> 9;
                 for _ in 0..10 {
                     value <<= 1;
                     value |= (acc & 1) as u16;
                     acc >>= 10;
                 }
                 if self.flip {
-                    flip_border(value)
+                    flip_line(value)
                 } else {
                     value
                 }
             }
         }
+    }
+
+    //the number is calculated going clock-wise
+    fn get_border(&self, side: Ori) -> u16 {
+        self.get_line(side, 0)
     }
 
     // modify b to connect to self, return the side or self that 'b' connect
@@ -190,8 +198,9 @@ impl Tile {
         for side_self in 0..4 {
             let ori = Ori::from(side_self);
             let border_f = self.get_border(ori);
-            let border_n = flip_border(border_f); //the borders connect mirrored
-                                                  //against all sides of b
+            //the borders connect mirrored
+            let border_n = flip_line(border_f);
+            //against all sides of b
             for side_b in 0..4 {
                 let side_b = Ori::from(side_b);
                 let border_b = b.get_border(side_b);
@@ -441,8 +450,8 @@ fn mount_image(
             max_y = *pos_y;
         }
     }
-    let len_x = max_x - min_x;
-    let len_y = max_y - min_y;
+    let len_x = max_x - min_x + 1;
+    let len_y = max_y - min_y + 1;
     if len_x != len_y {
         return Err(error("invalid grid size"));
     }
@@ -458,14 +467,101 @@ fn mount_image(
 fn solve1(input: &Input) -> Result<usize, Err> {
     let (size, grid) = mount_image(input)?;
     let mut ret = 1;
-    for pos in [(0, 0), (0, size), (size, 0), (size, size)].iter() {
+    for pos in
+        [(0, 0), (0, size - 1), (size - 1, 0), (size - 1, size - 1)].iter()
+    {
         ret *= grid.get(pos).unwrap().index;
     }
     Ok(ret)
 }
 
+//2|                  # |
+//1|#    ##    ##    ###|
+//0| #  #  #  #  #  #   |
+//Y+--------------------+
+// X01234567891111111111|
+//            0123456789|
+#[rustfmt::skip]
+const SEA_MONSTER: [(usize, usize); 15] = [
+    (18, 2),
+    (0, 1), (5, 1), (6, 1), (11, 1), (12, 1), (17, 1), (18, 1), (19, 1),
+    (1, 0), (4, 0), (7, 0), (10, 0), (13, 0), (16, 0),
+];
+
+const fn gen_all_sea_monsters() -> [[(usize, usize); 15]; 8] {
+    let mut monsters: [[(usize, usize); 15]; 8] = [[(0, 0); 15]; 8];
+    let mut p = 0;
+    while p < 15 {
+        //normal
+        monsters[0][p] = (SEA_MONSTER[p].0, SEA_MONSTER[p].1);
+        //flipped
+        monsters[1][p] = (19 - SEA_MONSTER[p].0, SEA_MONSTER[p].1);
+        //flipped and rotated
+        monsters[2][p] = (SEA_MONSTER[p].0, 2 - SEA_MONSTER[p].1);
+        //rotated
+        monsters[3][p] = (19 - SEA_MONSTER[p].0, 2 - SEA_MONSTER[p].1);
+        //vertical flipped
+        monsters[4][p] = (SEA_MONSTER[p].1, SEA_MONSTER[p].0);
+        //vertical normal (rotated 90 counter clockwise)
+        monsters[5][p] = (2 - SEA_MONSTER[p].1, SEA_MONSTER[p].0);
+        //vertical rotated
+        monsters[7][p] = (2 - SEA_MONSTER[p].1, 19 - SEA_MONSTER[p].0);
+        //vertical flipped and rotated
+        monsters[6][p] = (SEA_MONSTER[p].1, 19 - SEA_MONSTER[p].0);
+        p += 1;
+    }
+    monsters
+}
+
+const SEA_MONSTERS: [[(usize, usize); 15]; 8] = gen_all_sea_monsters();
+
 fn solve2(input: &Input) -> Result<usize, Err> {
-    unimplemented!();
+    let (grid_size, grid) = mount_image(input)?;
+    let side_len = grid_size * 8; //each tile are 8x8 bits
+    let mut image: Vec<Vec<bool>> = vec![vec![false; side_len]; side_len];
+    //used later
+    let mut total_pixels = 0;
+    //the image will be flipped on y, but the grid could be flipped too, so ...
+    for ((pos_x, pos_y), tile) in grid.iter() {
+        //iterate over the tile pixels
+        for bit_line in 0..8 {
+            let pixel_line = tile.get_line(Ori::Down, bit_line + 1);
+            for bit_column in 0..8 {
+                let new_pos_x = (*pos_x * 8) + bit_column;
+                let new_pos_y = (*pos_y * 8) + bit_line;
+                let pixel = pixel_line & (1 << (bit_column + 1)) != 0;
+                if pixel {
+                    image[new_pos_x][new_pos_y] = true;
+                    total_pixels += 1;
+                }
+            }
+        }
+    }
+
+    //the monster is 20x3 or 3x20
+    if side_len < 20 {
+        panic!("image is too small");
+    }
+    let mut found = 0;
+    //search all horizontals, ignore sobrepositions for now
+    //monster is 20x3
+    for m in 0..8 {
+        let (end_x, end_y) = if m < 4 { (19, 2) } else { (2, 19) };
+        for x in 0..side_len - end_x {
+            for y in 0..side_len - end_y {
+                if SEA_MONSTERS[m]
+                    .iter()
+                    .find(|(point_x, point_y)| !image[x + point_x][y + point_y])
+                    .is_none()
+                {
+                    found += 1;
+                }
+            }
+        }
+    }
+
+    found *= 15; //each monster is 15 bits
+    Ok(total_pixels - found)
 }
 
 fn main() -> Result<(), Err> {
@@ -500,7 +596,7 @@ fn test_1() -> Result<(), Err> {
 }
 
 #[test]
-fn test_part1() -> Result<(), Err> {
+fn test_part1_2() -> Result<(), Err> {
     const INPUT: &str = "Tile 2311:
 ..##.#..#.
 ##..#.....
@@ -610,5 +706,6 @@ Tile 3079:
 ..#.###...";
     let input = INPUT.parse()?;
     assert_eq!(solve1(&input)?, 20899048083289);
+    assert_eq!(solve2(&input)?, 273);
     Ok(())
 }
