@@ -252,19 +252,40 @@ impl<'a> Part1<'a> {
 }
 
 struct Part2<'a> {
-    input: &'a Part1<'a>,
+    part1: &'a Part1<'a>,
 }
 
 impl<'a> TryFrom<&'a Part1<'a>> for Part2<'a> {
     type Error = Err;
-    fn try_from(input: &'a Part1) -> Result<Self, Self::Error> {
-        Ok(Part2 { input })
+    fn try_from(part1: &'a Part1) -> Result<Self, Self::Error> {
+        Ok(Part2 { part1 })
     }
 }
 
 impl<'a> Part2<'a> {
-    fn solve(&mut self) -> Result<usize, Err> {
-        unimplemented!()
+    fn solve(&mut self) -> Result<String, Err> {
+        let mut aller: Vec<&String> = self
+            .part1
+            .aller_ingre
+            .keys()
+            .map(|x| self.part1.input.allergens.get(*x).unwrap())
+            .collect();
+        aller.sort();
+        let ingre: Vec<String> = aller
+            .iter()
+            .map(|aller| {
+                let aller_index = self
+                    .part1
+                    .input
+                    .allergens
+                    .iter()
+                    .position(|x| x == *aller)
+                    .unwrap();
+                let ingre_index = self.part1.aller_ingre[&aller_index];
+                self.part1.input.ingredients[ingre_index].clone()
+            })
+            .collect();
+        Ok(ingre.join(","))
     }
 }
 
@@ -292,6 +313,6 @@ sqjhc mxmxvkd sbzzf (contains fish)
     let mut part1 = Part1::try_from(&input)?;
     assert_eq!(part1.solve()?, 5);
     let mut part2 = Part2::try_from(&part1)?;
-    assert_eq!(part2.solve()?, 0);
+    assert_eq!(part2.solve()?, "mxmxvkd,sqjhc,fvjkl");
     Ok(())
 }
