@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::env;
 use std::fs;
@@ -101,19 +101,74 @@ impl<'a> Part1<'a> {
 }
 
 struct Part2<'a> {
-    part1: &'a Part1<'a>,
+    input: &'a Input,
 }
 
 impl<'a> TryFrom<&'a Part1<'a>> for Part2<'a> {
     type Error = Err;
     fn try_from(part1: &'a Part1) -> Result<Self, Self::Error> {
-        Ok(Part2 { part1 })
+        Ok(Part2 { input: part1.input })
     }
 }
 
 impl<'a> Part2<'a> {
     fn solve(&mut self) -> Result<usize, Err> {
-        unimplemented!()
+        let (_, ret) = Part2::get_winner_rec(&self.input.p1, &self.input.p2);
+        Ok(ret)
+    }
+
+    fn get_winner_rec(p1: &[usize], p2: &[usize]) -> (bool, usize) {
+        let calc_points = |winner: Vec<usize>| -> usize {
+            winner
+                .iter()
+                .rev()
+                .enumerate()
+                .fold(0, |acc, (i, v)| acc + (v * (i + 1)))
+        };
+
+        let mut p1 = p1.to_vec();
+        let mut p2 = p2.to_vec();
+        let mut rounds: HashSet<(Vec<usize>, Vec<usize>)> = HashSet::new();
+        loop {
+            match (p1.len(), p2.len()) {
+                (0, 0) => panic!("Nope"),
+                (_, 0) => return (true, calc_points(p1)),
+                (0, _) => return (false, calc_points(p2)),
+                _ => (),
+            }
+            //if this round happend before, p1 win
+            if rounds.contains(&(p1.clone(), p2.clone())) {
+                return (true, calc_points(p1));
+            }
+            //add this round to the history
+            rounds.insert((p1.clone(), p2.clone()));
+            let (card_p1, card_p2) = (p1.remove(0), p2.remove(0));
+            //recursive game
+            let p1_win_round = if card_p1 <= p1.len() && card_p2 <= p2.len() {
+                //try to avoid recursion
+                let max_p1 = *p1.iter().take(card_p1).max().unwrap();
+                let max_p2 = *p2.iter().take(card_p2).max().unwrap();
+                //the biggest number can never leave the player hand, so this
+                //player can never lose, unless it loops, in this case, p1 win
+                if max_p1 > max_p2 {
+                    true
+                } else {
+                    let (ret, _) =
+                        Part2::get_winner_rec(&p1[0..card_p1], &p2[0..card_p2]);
+                    ret
+                }
+            } else {
+                card_p1 > card_p2
+            };
+
+            if p1_win_round {
+                p1.push(card_p1);
+                p1.push(card_p2);
+            } else {
+                p2.push(card_p2);
+                p2.push(card_p1);
+            }
+        }
     }
 }
 
@@ -151,6 +206,6 @@ Player 2:
     let mut part1 = Part1::try_from(&input)?;
     assert_eq!(part1.solve()?, 306);
     let mut part2 = Part2::try_from(&part1)?;
-    assert_eq!(part2.solve()?, 0);
+    assert_eq!(part2.solve()?, 291);
     Ok(())
 }
