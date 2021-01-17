@@ -1,4 +1,3 @@
-use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::env;
 use std::fs;
@@ -83,21 +82,6 @@ impl<'a> Part1<'a> {
     }
 }
 
-struct Part2 {}
-
-impl<'a> TryFrom<&Part1<'a>> for Part2 {
-    type Error = Err;
-    fn try_from(part1: &Part1) -> Result<Self, Self::Error> {
-        unimplemented!()
-    }
-}
-
-impl Part2 {
-    fn solve(&mut self) -> Result<usize, Err> {
-        unimplemented!()
-    }
-}
-
 fn main() -> Result<(), Err> {
     let input: String = fs::read_to_string(
         env::args().nth(1).unwrap_or("input.txt".to_string()),
@@ -105,8 +89,6 @@ fn main() -> Result<(), Err> {
     let input: Input = input.parse()?;
     let mut part1 = Part1::try_from(&input)?;
     println!("P1: {}", part1.solve()?);
-    let mut part2 = Part2::try_from(&part1)?;
-    println!("P2: {}", part2.solve()?);
     Ok(())
 }
 
@@ -118,7 +100,5 @@ fn test_example() -> Result<(), Err> {
     let input: Input = INPUT.parse()?;
     let mut part1 = Part1::try_from(&input)?;
     assert_eq!(part1.solve()?, 14897079);
-    let mut part2 = Part2::try_from(&part1)?;
-    assert_eq!(part2.solve()?, 2208);
     Ok(())
 }
