@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::env;
 use std::fs;
@@ -9,7 +9,12 @@ use std::str::FromStr;
 type Err = Box<dyn std::error::Error>;
 
 enum Dir {
-    E, SE, SW, W, NW, NE
+    E,
+    SE,
+    SW,
+    W,
+    NW,
+    NE,
 }
 
 struct Input {
@@ -32,19 +37,15 @@ impl FromStr for Input {
                     None => break,
                     Some('e') => Dir::E,
                     Some('w') => Dir::W,
-                    Some('s') => {
-                        match chars.next() {
-                            Some('e') => Dir::SE,
-                            Some('w') => Dir::SW,
-                            _ => return Err(error("invalid input")),
-                        }
+                    Some('s') => match chars.next() {
+                        Some('e') => Dir::SE,
+                        Some('w') => Dir::SW,
+                        _ => return Err(error("invalid input")),
                     },
-                    Some('n') => {
-                        match chars.next() {
-                            Some('e') => Dir::NE,
-                            Some('w') => Dir::NW,
-                            _ => return Err(error("invalid input")),
-                        }
+                    Some('n') => match chars.next() {
+                        Some('e') => Dir::NE,
+                        Some('w') => Dir::NW,
+                        _ => return Err(error("invalid input")),
                     },
                     _ => return Err(error("Invalid input")),
                 };
@@ -53,7 +54,7 @@ impl FromStr for Input {
 
             dirs.push(dir);
         }
-        Ok(Input{dirs})
+        Ok(Input { dirs })
     }
 }
 
@@ -73,8 +74,10 @@ struct Part1<'a> {
 impl<'a> TryFrom<&'a Input> for Part1<'a> {
     type Error = Err;
     fn try_from(input: &'a Input) -> Result<Self, Self::Error> {
-        Ok(Self{input,
-        floor: HashSet::new()})
+        Ok(Self {
+            input,
+            floor: HashSet::new(),
+        })
     }
 }
 
@@ -93,28 +96,28 @@ impl<'a> Part1<'a> {
                         } else {
                             coord = (coord.0 + 1, coord.1 + 1)
                         }
-                    },
+                    }
                     Dir::SE => {
                         if coord.1 % 2 == 0 {
                             coord = (coord.0, coord.1 - 1)
                         } else {
                             coord = (coord.0 + 1, coord.1 - 1)
                         }
-                    },
+                    }
                     Dir::NW => {
                         if coord.1 % 2 == 0 {
                             coord = (coord.0 - 1, coord.1 + 1)
                         } else {
                             coord = (coord.0, coord.1 + 1)
                         }
-                    },
+                    }
                     Dir::SW => {
                         if coord.1 % 2 == 0 {
                             coord = (coord.0 - 1, coord.1 - 1)
                         } else {
                             coord = (coord.0, coord.1 - 1)
                         }
-                    },
+                    }
                 }
             }
             if self.floor.contains(&coord) {
@@ -129,20 +132,73 @@ impl<'a> Part1<'a> {
     }
 }
 
-struct Part2<'a> {
-    input: &'a Input,
+struct Part2 {
+    floor: HashSet<(isize, isize)>,
 }
 
-impl<'a> TryFrom<&'a Part1<'a>> for Part2<'a> {
+impl<'a> TryFrom<&Part1<'a>> for Part2 {
     type Error = Err;
-    fn try_from(part1: &'a Part1) -> Result<Self, Self::Error> {
-        unimplemented!()
+    fn try_from(part1: &Part1) -> Result<Self, Self::Error> {
+        let mut floor = HashSet::new();
+        for k in part1.floor.iter() {
+            floor.insert(*k);
+        }
+        Ok(Part2 { floor })
     }
 }
 
-impl<'a> Part2<'a> {
+impl Part2 {
+    fn get_all_around(x: &(isize, isize)) -> [(isize, isize); 7] {
+        let (x, y) = *x;
+        [
+            (x, y),                                      //self
+            (x + 1, y),                                  //E
+            (x - 1, y),                                  //W
+            (x + if y % 2 == 0 { 0 } else { 1 }, y + 1), //NE
+            (x + if y % 2 == 0 { 0 } else { 1 }, y - 1), //SE
+            (x - if y % 2 == 0 { 1 } else { 0 }, y + 1), //NW
+            (x - if y % 2 == 0 { 1 } else { 0 }, y - 1), //SW
+        ]
+    }
+
     fn solve(&mut self) -> Result<usize, Err> {
-        unimplemented!()
+        //the value is false to white, true to black
+        let mut floor_cal = HashMap::new();
+        for _ in 0..100 {
+            //process only the black tiles and neighbours
+            for hex_black in self.floor.iter() {
+                //check the hex and the 6 neigbours
+                for hex in Self::get_all_around(hex_black).iter() {
+                    //check if this hex was already processed
+                    if floor_cal.contains_key(hex) {
+                        continue;
+                    }
+                    //check how many neibours are black
+                    let mut found = 0;
+                    for nei in Self::get_all_around(hex).iter().skip(1) {
+                        if self.floor.contains(nei) {
+                            found += 1;
+                        }
+                    }
+                    let color = if self.floor.contains(hex) {
+                        //black, flip if neig == 0 or > 2
+                        !(found == 0 || found > 2)
+                    } else {
+                        //white, flip if nei eq 2 black
+                        found == 2
+                    };
+                    floor_cal.insert(*hex, color);
+                }
+            }
+            self.floor.clear();
+            for (k, v) in floor_cal.iter() {
+                if *v {
+                    self.floor.insert(*k);
+                }
+            }
+            floor_cal.clear();
+        }
+        Ok(self.floor.len())
     }
 }
 
