@@ -122,16 +122,70 @@ struct Part2<'a> {
     input: &'a Input,
 }
 
-impl<'a> TryFrom<&'a Part1<'a>> for Part2<'a> {
+impl<'a> TryFrom<&'a Input> for Part2<'a> {
     type Error = Err;
-    fn try_from(part1: &'a Part1) -> Result<Self, Self::Error> {
-        unimplemented!()
+    fn try_from(input: &'a Input) -> Result<Self, Self::Error> {
+        Ok(Part2 {
+            input,
+        })
     }
 }
 
 impl<'a> Part2<'a> {
-    fn solve(&mut self) -> Result<String, Err> {
-        unimplemented!()
+    //each round only a few changes accour in order, most of the time is spend
+    //shifting the data, I could fix that using a linked list.
+    //TODO: implement a better solution for linked lists
+    //think about the number on the input as indexs not values
+    fn solve(&mut self, rounds: usize) -> Result<String, Err> {
+        //each cup store the index of the next cups
+        //ignore index 0 for now, cups are indexed 1..=1_000_000
+        let mut cups: Vec<usize> = vec![0; 1_000_000 + 1];
+        //each index contains the value for the next index
+        for x in self.input.cups.windows(2) {
+            cups[x[0] as usize] = x[1] as usize;
+        }
+        //last point to the start of the filler
+        let last = self.input.cups[self.input.cups.len() - 1] as usize;
+        cups[last] = self.input.cups.len() + 1;
+        //fill the rest with a sequnce
+        for x in (self.input.cups.len() + 1..1_000_000).into_iter() {
+            //is sequential
+            cups[x] = x + 1;
+        }
+        //cup 1_000_000 point back the the first one
+        cups[1_000_000] = self.input.cups[0] as usize;
+
+        //start from the first cup
+        let mut cur_cup = self.input.cups[0] as usize;
+
+        for _ in 0..rounds + 1 {
+            let pick1 = cups[cur_cup]; //next after the current cup
+            let pick2 = cups[pick1]; //next after pick1
+            let pick3 = cups[pick2]; //next after pick2
+
+            let mut dest = cur_cup;
+            while cur_cup == dest || pick1 == dest || pick2 == dest || pick3 == dest {
+                if dest == 1 {
+                    //go to the last
+                    dest = cups.len() - 1;
+                } else {
+                    dest -= 1;
+                }
+            }
+            //the cup after the current cup if the one after the 3 pick cups
+            cups[cur_cup] = cups[pick3];
+            //the 3 cups a placed after the destination
+            cups[pick3] = cups[dest];
+            //the destination is placed before the 3 cups
+            cups[dest] = pick1;
+
+            //next cup
+            cur_cup = cups[cur_cup];
+
+        }
+        let after1 = cups[1];
+        let after_after1 = cups[after1];
+        Ok((after1 * after_after1).to_string())
     }
 }
 
@@ -142,8 +196,8 @@ fn main() -> Result<(), Err> {
     let input: Input = input.parse()?;
     let mut part1 = Part1::try_from(&input)?;
     println!("P1: {}", part1.solve(100)?);
-    let mut part2 = Part2::try_from(&part1)?;
-    println!("P2: {}", part2.solve()?);
+    let mut part2 = Part2::try_from(&input)?;
+    println!("P2: {}", part2.solve(10_000_000)?);
     Ok(())
 }
 
@@ -155,7 +209,7 @@ fn test_example() -> Result<(), Err> {
     let mut part1 = Part1::try_from(&input)?;
     assert_eq!(part1.solve(10)?, "92658374");
     assert_eq!(part1.solve(100)?, "67384529");
-    let mut part2 = Part2::try_from(&part1)?;
-    assert_eq!(part2.solve()?, "");
+    let mut part2 = Part2::try_from(&input)?;
+    assert_eq!(part2.solve(10_000_000)?, "149245887792");
     Ok(())
 }
